@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Offline Tester</string>
+    <string name="status_idle">Apropie telefonul de POS</string>
+    <string name="status_testing">Se verifică...</string>
+    <string name="btn_start">START TEST</string>
+    <string name="btn_clear">Șterge</string>
+    <string name="btn_export">EXPORT</string>
+    <string name="title_activity">POS Offline Tester</string>
+</resources>

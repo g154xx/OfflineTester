@@ -1,0 +1,29 @@
+# Gradle
+.gradle
+/build
+/app/build
+*.apk
+
+# Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Logs
+*.log
+*.txt
+
+# Build outputs
+/dist
+/out
