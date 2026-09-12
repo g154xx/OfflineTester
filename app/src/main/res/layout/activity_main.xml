@@ -1,187 +1,200 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#1A1A1A"
-    android:padding="12dp">
+package com.gag4.offlinetester;
 
-    <!-- Header -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#2A2A2A"
-        android:padding="12dp"
-        android:layout_marginBottom="12dp"
-        android:layout_marginStart="-12dp"
-        android:layout_marginEnd="-12dp"
-        android:layout_marginTop="-12dp">
+import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.nfc.NfcAdapter;
+import android.os.Build;
+import android.os.Bundle;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="POS Offline Tester"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="v1.0 - HCE Emulator"
-            android:textSize="12sp"
-            android:textColor="#888888"
-            android:layout_marginTop="4dp" />
-    </LinearLayout>
+public class MainActivity extends AppCompatActivity {
 
-    <!-- Status Panel -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#252525"
-        android:padding="12dp"
-        android:layout_marginBottom="12dp">
+    private TextView tvStatus;
+    private TextView tvVerdict;
+    private TextView tvSummary;
+    private ProgressBar pbTest;
+    private RecyclerView rvLog;
+    private LogAdapter logAdapter;
+    private TestViewModel viewModel;
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Stare:"
-            android:textSize="12sp"
-            android:textColor="#888888" />
+    private BroadcastReceiver logReceiver;
 
-        <TextView
-            android:id="@+id/tv_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Inactiv"
-            android:textSize="14sp"
-            android:textColor="#4CAF50"
-            android:layout_marginTop="4dp" />
+    private final ActivityResultLauncher<String> permissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (!granted) {
+                    Toast.makeText(this, "Permisiune NFC refuzată", Toast.LENGTH_LONG).show();
+                }
+            });
 
-        <ProgressBar
-            android:id="@+id/pb_test"
-            android:layout_width="match_parent"
-            android:layout_height="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            style="@android:style/Widget.ProgressBar.Horizontal"
-            android:max="100"
-            android:progress="0" />
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Verdict:"
-            android:textSize="12sp"
-            android:textColor="#888888"
-            android:layout_marginTop="8dp" />
+        tvStatus = findViewById(R.id.tv_status);
+        tvVerdict = findViewById(R.id.tv_verdict);
+        tvSummary = findViewById(R.id.tv_summary);
+        pbTest = findViewById(R.id.pb_test);
+        rvLog = findViewById(R.id.rv_log);
+        Button btnClear = findViewById(R.id.btn_clear);
+        Button btnStart = findViewById(R.id.btn_start);
+        Button btnExport = findViewById(R.id.btn_export);
 
-        <TextView
-            android:id="@+id/tv_verdict"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Nerezolvat"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#FFC107"
-            android:layout_marginTop="4dp" />
-    </LinearLayout>
+        logAdapter = new LogAdapter();
+        rvLog.setLayoutManager(new LinearLayoutManager(this));
+        rvLog.setAdapter(logAdapter);
 
-    <!-- Log Panel Header -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
+        viewModel = new ViewModelProvider(this).get(TestViewModel.class);
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Timeline APDU"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+        // Observers
+        viewModel.getLogEntries().observe(this, entries -> {
+            logAdapter.setEntries(entries);
+            if (entries != null && !entries.isEmpty()) {
+                rvLog.scrollToPosition(entries.size() - 1);
+            }
+        });
 
-        <Button
-            android:id="@+id/btn_clear"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Șterge"
-            android:textSize="11sp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp" />
-    </LinearLayout>
+        viewModel.getStatusText().observe(this, text -> {
+            if (text != null) tvStatus.setText(text);
+        });
 
-    <!-- Log RecyclerView -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rv_log"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#0D0D0D"
-        android:padding="8dp" />
+        viewModel.getProgressPercent().observe(this, progress -> {
+            if (progress != null && pbTest != null) pbTest.setProgress(progress);
+        });
 
-    <!-- Summary Panel -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#252525"
-        android:padding="12dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp">
+        viewModel.getTestVerdict().observe(this, verdict -> {
+            if (verdict != null) showVerdict(verdict);
+        });
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Rezumat Tranzacție:"
-            android:textSize="12sp"
-            android:textColor="#888888" />
+        // Verifică NFC și permisiuni
+        checkPermissions();
+        checkNfc();
 
-        <TextView
-            android:id="@+id/tv_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Aşteptând test..."
-            android:textSize="12sp"
-            android:textColor="#BBBBBB"
-            android:layout_marginTop="8dp"
-            android:fontFamily="monospace" />
-    </LinearLayout>
+        // Buton Start
+        btnStart.setOnClickListener(v -> {
+            viewModel.startTest();
+            Toast.makeText(this, "Test pornit. Apropie telefonul de POS.", Toast.LENGTH_SHORT).show();
+        });
 
-    <!-- Action Buttons -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginStart="-12dp"
-        android:layout_marginEnd="-12dp"
-        android:layout_marginBottom="-12dp">
+        // Buton Clear
+        btnClear.setOnClickListener(v -> {
+            viewModel.clearLogs();
+            logAdapter.refreshData();
+        });
 
-        <Button
-            android:id="@+id/btn_start"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="START TEST"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:padding="12dp" />
+        // Buton Export
+        btnExport.setOnClickListener(v -> exportLog());
 
-        <Button
-            android:id="@+id/btn_export"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="EXPORT"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:padding="12dp" />
-    </LinearLayout>
+        // Broadcast receiver pentru log-uri (de la Sniffer Xposed)
+        logReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String directionStr = intent.getStringExtra("direction");
+                String data = intent.getStringExtra("data");
+                String note = intent.getStringExtra("note");
+                long ts = intent.getLongExtra("timestamp", System.currentTimeMillis());
 
-</LinearLayout>
+                if (directionStr == null) return;
+
+                LogEntry.Direction direction;
+                try {
+                    direction = LogEntry.Direction.valueOf(directionStr);
+                } catch (Exception e) {
+                    direction = LogEntry.Direction.INFO;
+                }
+
+                viewModel.addLog(ts, direction, data, note);
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(ApduLogger.ACTION_LOG);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(logReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(logReceiver, filter);
+        }
+
+        Toast.makeText(this,
+                "Apropie telefonul de POS. Log-urile apar mai jos.",
+                Toast.LENGTH_LONG).show();
+    }
+
+    private void checkPermissions() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.NFC)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                permissionLauncher.launch(Manifest.permission.NFC);
+            }
+        }
+    }
+
+    private void checkNfc() {
+        NfcAdapter adapter = NfcAdapter.getDefaultAdapter(this);
+        if (adapter == null) {
+            Toast.makeText(this, "Dispozitivul nu are NFC", Toast.LENGTH_LONG).show();
+        } else if (!adapter.isEnabled()) {
+            Toast.makeText(this, "NFC este dezactivat. Activează-l!", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showVerdict(ApduAnalyzer.Verdict verdict) {
+        switch (verdict) {
+            case SUPPORTS_OFFLINE:
+                tvVerdict.setText("✅ fonduri insuficiente");
+                tvVerdict.setTextColor(getResources().getColor(R.color.green));
+                break;
+            case REQUIRES_ONLINE:
+            case DECLINED:
+                tvVerdict.setText("❌ fonduri insuficiente");
+                tvVerdict.setTextColor(getResources().getColor(R.color.red));
+                break;
+            case INCOMPLETE:
+                tvVerdict.setText("⚠️ Verificare incompletă");
+                tvVerdict.setTextColor(getResources().getColor(R.color.yellow));
+                break;
+            case UNKNOWN:
+            default:
+                tvVerdict.setText("Nerezolvat");
+                tvVerdict.setTextColor(getResources().getColor(R.color.yellow));
+                break;
+        }
+    }
+
+    private void exportLog() {
+        try {
+            java.io.File logFile = ApduLogger.getInstance().getLogFile();
+            if (logFile != null && logFile.exists()) {
+                Toast.makeText(this, "Log salvat: " + logFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "Nu există log de exportat.", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "Eroare export: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (logReceiver != null) {
+            try {
+                unregisterReceiver(logReceiver);
+            } catch (Exception ignored) {}
+        }
+    }
+}
