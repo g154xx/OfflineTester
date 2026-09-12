@@ -1,7 +1,6 @@
 package com.gag4.offlinetester;
 
 import android.app.Application;
-import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -17,20 +16,15 @@ public class TestViewModel extends AndroidViewModel {
 
     public static final long TEST_TIMEOUT_MS = 45000L;
 
-    // LiveData pentru UI
     private final MutableLiveData<List<LogEntry>> logEntries = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<String> statusText = new MutableLiveData<>("Apropie telefonul de POS");
     private final MutableLiveData<Integer> progressPercent = new MutableLiveData<>(0);
     private final MutableLiveData<ApduAnalyzer.Verdict> testVerdict = new MutableLiveData<>(ApduAnalyzer.Verdict.UNKNOWN);
 
-    // Analizor
     private final ApduAnalyzer analyzer = new ApduAnalyzer();
-
-    // Timeout
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
 
-    // Timestamp start test - PUBLIC pentru a fi accesat din MainActivity
     public long testStartTime = 0L;
     private boolean testRunning = false;
 
@@ -39,29 +33,12 @@ public class TestViewModel extends AndroidViewModel {
         ApduLogger.getInstance().init(application);
     }
 
-    // ---------- Getters pentru LiveData ----------
-    public LiveData<List<LogEntry>> getLogEntries() {
-        return logEntries;
-    }
+    public LiveData<List<LogEntry>> getLogEntries() { return logEntries; }
+    public LiveData<String> getStatusText() { return statusText; }
+    public LiveData<Integer> getProgressPercent() { return progressPercent; }
+    public LiveData<ApduAnalyzer.Verdict> getTestVerdict() { return testVerdict; }
+    public long getTestStartTime() { return testStartTime; }
 
-    public LiveData<String> getStatusText() {
-        return statusText;
-    }
-
-    public LiveData<Integer> getProgressPercent() {
-        return progressPercent;
-    }
-
-    public LiveData<ApduAnalyzer.Verdict> getTestVerdict() {
-        return testVerdict;
-    }
-
-    // ---------- Getter pentru testStartTime (variantă recomandată) ----------
-    public long getTestStartTime() {
-        return testStartTime;
-    }
-
-    // ---------- Start test ----------
     public void startTest() {
         testRunning = true;
         testStartTime = System.currentTimeMillis();
@@ -73,10 +50,7 @@ public class TestViewModel extends AndroidViewModel {
 
         clearLogsInternal();
 
-        // Timeout
-        if (timeoutRunnable != null) {
-            handler.removeCallbacks(timeoutRunnable);
-        }
+        if (timeoutRunnable != null) handler.removeCallbacks(timeoutRunnable);
         timeoutRunnable = () -> {
             if (testRunning) {
                 testRunning = false;
@@ -90,7 +64,6 @@ public class TestViewModel extends AndroidViewModel {
         handler.postDelayed(timeoutRunnable, TEST_TIMEOUT_MS);
     }
 
-    // ---------- Stop test ----------
     public void stopTest() {
         testRunning = false;
         if (timeoutRunnable != null) {
@@ -103,7 +76,6 @@ public class TestViewModel extends AndroidViewModel {
         progressPercent.setValue(100);
     }
 
-    // ---------- Adaugă log din broadcast ----------
     public void addLog(LogEntry.Direction direction, String data, String note) {
         addLog(System.currentTimeMillis(), direction, data, note);
     }
@@ -117,7 +89,6 @@ public class TestViewModel extends AndroidViewModel {
         current.add(entry);
         logEntries.setValue(current);
 
-        // Analizăm APDU-urile TX (de la POS)
         if (direction == LogEntry.Direction.TX && data != null) {
             try {
                 byte[] apdu = HexUtils.fromHex(data);
@@ -129,7 +100,6 @@ public class TestViewModel extends AndroidViewModel {
             } catch (Exception ignored) {}
         }
 
-        // Progress
         if (testRunning) {
             long elapsed = System.currentTimeMillis() - testStartTime;
             int progress = (int) Math.min(100, (elapsed * 100) / TEST_TIMEOUT_MS);
@@ -137,7 +107,6 @@ public class TestViewModel extends AndroidViewModel {
         }
     }
 
-    // ---------- Clear logs ----------
     public void clearLogs() {
         clearLogsInternal();
         analyzer.reset();
@@ -150,7 +119,6 @@ public class TestViewModel extends AndroidViewModel {
         logEntries.setValue(new ArrayList<>());
     }
 
-    // ---------- Verdict curent ----------
     public ApduAnalyzer.Verdict getCurrentVerdict() {
         ApduAnalyzer.Verdict v = testVerdict.getValue();
         return (v != null) ? v : ApduAnalyzer.Verdict.UNKNOWN;
@@ -159,8 +127,6 @@ public class TestViewModel extends AndroidViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
-        if (timeoutRunnable != null) {
-            handler.removeCallbacks(timeoutRunnable);
-        }
+        if (timeoutRunnable != null) handler.removeCallbacks(timeoutRunnable);
     }
 }
