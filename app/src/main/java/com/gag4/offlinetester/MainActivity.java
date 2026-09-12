@@ -10,7 +10,6 @@ import android.nfc.NfcAdapter;
 import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -23,14 +22,13 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.util.List;
-
 public class MainActivity extends AppCompatActivity {
 
+    private TextView tvStatus;
     private TextView tvVerdict;
-    private ImageView ivIcon;
+    private TextView tvSummary;
+    private ProgressBar pbTest;
     private RecyclerView rvLog;
-    private ProgressBar progressBar;
     private LogAdapter logAdapter;
     private TestViewModel viewModel;
 
@@ -48,10 +46,11 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        tvStatus = findViewById(R.id.tv_status);
         tvVerdict = findViewById(R.id.tv_verdict);
-        ivIcon = findViewById(R.id.iv_icon);
+        tvSummary = findViewById(R.id.tv_summary);
+        pbTest = findViewById(R.id.pb_test);
         rvLog = findViewById(R.id.rv_log);
-        progressBar = findViewById(R.id.progress_bar);
         Button btnClear = findViewById(R.id.btn_clear);
         Button btnStart = findViewById(R.id.btn_start);
         Button btnExport = findViewById(R.id.btn_export);
@@ -71,11 +70,11 @@ public class MainActivity extends AppCompatActivity {
         });
 
         viewModel.getStatusText().observe(this, text -> {
-            if (text != null) tvVerdict.setText(text);
+            if (text != null) tvStatus.setText(text);
         });
 
         viewModel.getProgressPercent().observe(this, progress -> {
-            if (progress != null) progressBar.setProgress(progress);
+            if (progress != null && pbTest != null) pbTest.setProgress(progress);
         });
 
         viewModel.getTestVerdict().observe(this, verdict -> {
@@ -87,12 +86,10 @@ public class MainActivity extends AppCompatActivity {
         checkNfc();
 
         // Buton Start
-        if (btnStart != null) {
-            btnStart.setOnClickListener(v -> {
-                viewModel.startTest();
-                Toast.makeText(this, "Test pornit. Apropie telefonul de POS.", Toast.LENGTH_SHORT).show();
-            });
-        }
+        btnStart.setOnClickListener(v -> {
+            viewModel.startTest();
+            Toast.makeText(this, "Test pornit. Apropie telefonul de POS.", Toast.LENGTH_SHORT).show();
+        });
 
         // Buton Clear
         btnClear.setOnClickListener(v -> {
@@ -101,9 +98,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Buton Export
-        if (btnExport != null) {
-            btnExport.setOnClickListener(v -> exportLog());
-        }
+        btnExport.setOnClickListener(v -> exportLog());
 
         // Broadcast receiver pentru log-uri (de la Sniffer Xposed)
         logReceiver = new BroadcastReceiver() {
@@ -160,26 +155,22 @@ public class MainActivity extends AppCompatActivity {
     private void showVerdict(ApduAnalyzer.Verdict verdict) {
         switch (verdict) {
             case SUPPORTS_OFFLINE:
-                tvVerdict.setText("fonduri insuficiente");
+                tvVerdict.setText("✅ fonduri insuficiente");
                 tvVerdict.setTextColor(getResources().getColor(R.color.green));
-                ivIcon.setImageResource(R.drawable.ic_green_check);
                 break;
             case REQUIRES_ONLINE:
             case DECLINED:
-                tvVerdict.setText("fonduri insuficiente");
+                tvVerdict.setText("❌ fonduri insuficiente");
                 tvVerdict.setTextColor(getResources().getColor(R.color.red));
-                ivIcon.setImageResource(R.drawable.ic_red_x);
                 break;
             case INCOMPLETE:
-                tvVerdict.setText("Verificare incompletă");
+                tvVerdict.setText("⚠️ Verificare incompletă");
                 tvVerdict.setTextColor(getResources().getColor(R.color.yellow));
-                ivIcon.setImageResource(R.drawable.ic_yellow_warning);
                 break;
             case UNKNOWN:
             default:
-                tvVerdict.setText(R.string.status_idle);
-                tvVerdict.setTextColor(getResources().getColor(R.color.text_gray));
-                ivIcon.setImageDrawable(null);
+                tvVerdict.setText("Nerezolvat");
+                tvVerdict.setTextColor(getResources().getColor(R.color.yellow));
                 break;
         }
     }
