@@ -9,14 +9,36 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
 
-    private final List<LogEntry> entries;
+    private final List<LogEntry> entries = new ArrayList<>();
 
-    public LogAdapter(List<LogEntry> entries) {
-        this.entries = entries;
+    public LogAdapter() {
+    }
+
+    public LogAdapter(List<LogEntry> initialEntries) {
+        if (initialEntries != null) {
+            this.entries.addAll(initialEntries);
+        }
+    }
+
+    public void setEntries(List<LogEntry> newEntries) {
+        this.entries.clear();
+        if (newEntries != null) {
+            this.entries.addAll(newEntries);
+        }
+        super.notifyDataSetChanged();
+    }
+
+    /**
+     * Metodă proprie pentru refresh (nu putem suprascrie notifyDataSetChanged,
+     * pentru că este final în RecyclerView.Adapter).
+     */
+    public void refreshData() {
+        super.notifyDataSetChanged();
     }
 
     @NonNull
@@ -32,56 +54,44 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
         LogEntry entry = entries.get(position);
         holder.tvTime.setText(entry.getFormattedTime());
 
-        int colorDir = Color.parseColor("#FFFFFF");
-        int colorData = Color.parseColor("#FFFFFF");
-        String dirText = "";
-
         switch (entry.getDirection()) {
             case TX:
-                dirText = ">>";
-                colorDir = Color.parseColor("#4CAF50");  // Green
-                colorData = Color.parseColor("#4CAF50");
+                holder.tvDir.setText(">>");
+                holder.tvDir.setTextColor(Color.parseColor("#4CAF50"));
+                holder.tvData.setTextColor(Color.parseColor("#4CAF50"));
                 break;
             case RX:
-                dirText = "<<";
-                colorDir = Color.parseColor("#03A9F4");  // Blue
-                colorData = Color.parseColor("#03A9F4");
+                holder.tvDir.setText("<<");
+                holder.tvDir.setTextColor(Color.parseColor("#03A9F4"));
+                holder.tvData.setTextColor(Color.parseColor("#03A9F4"));
                 break;
             case INFO:
-                dirText = "--";
-                colorDir = Color.parseColor("#9E9E9E");  // Gray
-                colorData = Color.parseColor("#9E9E9E");
+                holder.tvDir.setText("--");
+                holder.tvDir.setTextColor(Color.parseColor("#BDBDBD"));
+                holder.tvData.setTextColor(Color.parseColor("#BDBDBD"));
                 break;
             case ERROR:
-                dirText = "!!";
-                colorDir = Color.parseColor("#F44336");  // Red
-                colorData = Color.parseColor("#F44336");
+                holder.tvDir.setText("!!");
+                holder.tvDir.setTextColor(Color.parseColor("#F44336"));
+                holder.tvData.setTextColor(Color.parseColor("#F44336"));
                 break;
             case VERDICT:
-                dirText = "==";
-                colorDir = Color.parseColor("#FFC107");  // Yellow
-                colorData = Color.parseColor("#FFC107");
+                holder.tvDir.setText("==");
+                holder.tvDir.setTextColor(Color.parseColor("#FFC107"));
+                holder.tvData.setTextColor(Color.parseColor("#FFC107"));
                 break;
         }
-
-        holder.tvDir.setText(dirText);
-        holder.tvDir.setTextColor(colorDir);
 
         String data = entry.getData();
         if (entry.getNote() != null && !entry.getNote().isEmpty()) {
             data = data + "  # " + entry.getNote();
         }
         holder.tvData.setText(data);
-        holder.tvData.setTextColor(colorData);
     }
 
     @Override
     public int getItemCount() {
         return entries.size();
-    }
-
-    public void notifyDataSetChanged() {
-        super.notifyDataSetChanged();
     }
 
     static class LogViewHolder extends RecyclerView.ViewHolder {
