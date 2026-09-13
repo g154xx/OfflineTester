@@ -42,12 +42,14 @@ public class MainActivity extends AppCompatActivity {
             });
 
     @Override
-protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    CrashHandler.install(this);   // ← adaugi doar această linie
-    setContentView(R.layout.activity_main);
-    // ... restul codului tău rămâne exact cum este
-}
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        // Instalăm crash handler ÎNAINTE de orice altceva
+        CrashHandler.install(this);
+
+        setContentView(R.layout.activity_main);
+
         tvStatus = findViewById(R.id.tv_status);
         tvVerdict = findViewById(R.id.tv_verdict);
         tvSummary = findViewById(R.id.tv_summary);
