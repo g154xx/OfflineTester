@@ -17,7 +17,7 @@ public class TestViewModel extends ViewModel {
     private List<LogEntry> entries = new ArrayList<>();
     private ApduAnalyzer analyzer;
     private ApduLogger logger;
-    private long testStartTime = 0;
+    public long testStartTime = 0;
 
     public TestViewModel() {
         logEntries.setValue(entries);
