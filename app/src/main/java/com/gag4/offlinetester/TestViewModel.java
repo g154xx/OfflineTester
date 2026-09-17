@@ -99,7 +99,7 @@ public class TestViewModel extends ViewModel {
     }
 
     public ApduAnalyzer.Verdict getCurrentVerdict() {
-        Verdict v = testVerdict.getValue();
+        ApduAnalyzer.Verdict v = testVerdict.getValue();  // ✓ CORECT;
         return v != null ? v : ApduAnalyzer.Verdict.UNKNOWN;
     }
 
