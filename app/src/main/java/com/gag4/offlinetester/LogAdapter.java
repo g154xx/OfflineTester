@@ -80,10 +80,6 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
         return entries.size();
     }
 
-    public void notifyDataSetChanged() {
-        super.notifyDataSetChanged();
-    }
-
     static class LogViewHolder extends RecyclerView.ViewHolder {
         TextView tvTime, tvDir, tvData;
 
