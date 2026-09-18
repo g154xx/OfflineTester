@@ -9,145 +9,17 @@ import java.util.Map;
 
 /**
  * HCE Card Service - Emulates a contactless card that supports offline mode.
- *
- * Handles:
- * - SELECT (AID selection)
- * - GET PROCESSING OPTIONS (GPO)
- * - GENERATE AC (with P1=0x80 for TC offline)
- * - READ RECORD (for card data)
+ * 
+ * FIXES:
+ * - Proper AID matching (no trailing zeros)
+ * - Flexible APDU matching
+ * - Better error handling
  */
 public class HceCardService extends HostApduService {
 
     private static final String TAG = "HceCardService";
-
-    // Response map: APDU command (hex) -> Response (hex)
-    private static final Map<String, byte[]> RESPONSE_MAP = new HashMap<>();
-
     private ApduAnalyzer analyzer;
     private ApduLogger logger;
-
-    static {
-        buildResponseMap();
-    }
-
-    private static void buildResponseMap() {
-        // ===== SELECT PSE (Payment System Environment) =====
-        RESPONSE_MAP.put(
-                "00A404000E325041592E5359532E444446303031",
-                concat(
-                        HexUtils.fromHex("6F2A840E325041592E5359532E4444463031A518BF0C1561134F07A00000000410108701019F0A04000101049F38069F1A029F0206"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT Mastercard =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000004101000",
-                concat(
-                        buildSelectResponse("A0000000041010", "Mastercard"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT Maestro =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000043060000",
-                concat(
-                        buildSelectResponse("A0000000043060", "Maestro"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT Visa =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000003101000",
-                concat(
-                        buildSelectResponse("A0000000031010", "Visa"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT Visa Electron =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000032010000",
-                concat(
-                        buildSelectResponse("A0000000032010", "Visa Electron"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT American Express =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000025010000",
-                concat(
-                        buildSelectResponse("A0000000025010", "AmEx"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT Diners Club =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000036000000",
-                concat(
-                        buildSelectResponse("A0000000036000", "Diners"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== SELECT JCB =====
-        RESPONSE_MAP.put(
-                "00A4040007A000000065101000",
-                concat(
-                        buildSelectResponse("A0000000651010", "JCB"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== GET PROCESSING OPTIONS (GPO) =====
-        RESPONSE_MAP.put(
-                "80A8000013",  // GPO with various PDOL values (prefix)
-                concat(
-                        TlvBuilder.buildGpoResponse(),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== GENERATE AC P1=0x80 (TC - Transaction Certificate, offline) =====
-        RESPONSE_MAP.put(
-                "80AE80",  // GENERATE AC with P1=0x80 (TC request)
-                concat(
-                        TlvBuilder.buildGenerateAcResponse_TC(),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== GENERATE AC P1=0x00 (ARQC - online request) =====
-        RESPONSE_MAP.put(
-                "80AE00",  // GENERATE AC with P1=0x00 (ARQC request)
-                concat(
-                        TlvBuilder.buildGenerateAcResponse_ARQC(),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== GENERATE AC P1=0x40 (AAC - declined) =====
-        RESPONSE_MAP.put(
-                "80AE40",  // GENERATE AC with P1=0x40
-                concat(
-                        HexUtils.fromHex("771A9F270809876543210ABCDEF9F10060600000000"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-
-        // ===== READ RECORD SFI=2, record=1 =====
-        RESPONSE_MAP.put(
-                "00B2011400",
-                concat(
-                        HexUtils.fromHex("70819E9F420209465F24033203315A0853998207019456015F3401009F0702FFC09F080200028C279F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C08"),
-                        new byte[]{(byte) 0x90, (byte) 0x00}
-                )
-        );
-    }
 
     @Override
     public void onCreate() {
@@ -155,59 +27,131 @@ public class HceCardService extends HostApduService {
         analyzer = new ApduAnalyzer();
         logger = ApduLogger.getInstance();
         logger.init(this);
+        android.util.Log.d(TAG, "HceCardService created");
     }
 
     @Override
     public byte[] processCommandApdu(byte[] commandApdu, Bundle extras) {
-        if (commandApdu == null) {
-            return TlvBuilder.sw((byte) 0x69, (byte) 0x85);
+        if (commandApdu == null || commandApdu.length < 4) {
+            return sw((byte) 0x69, (byte) 0x85);
         }
 
-        String apduHex = HexUtils.toHex(commandApdu).toUpperCase();
+        try {
+            String apduHex = HexUtils.toHex(commandApdu).toUpperCase();
+            android.util.Log.d(TAG, "Received APDU: " + apduHex);
 
-        // Log RX
-        logger.log(this, LogEntry.Direction.RX, apduHex, "POS trimite APDU");
+            // Log RX
+            logger.log(this, LogEntry.Direction.RX, apduHex, "POS trimite APDU");
 
-        // Analyze
-        analyzer.analyzeTx(commandApdu);
+            // Analyze for verdict
+            analyzer.analyzeTx(commandApdu);
 
-        // Look for exact match first
-        if (RESPONSE_MAP.containsKey(apduHex)) {
-            byte[] response = RESPONSE_MAP.get(apduHex);
-            logger.log(this, LogEntry.Direction.TX, HexUtils.toHex(response), "Răspuns gasit");
+            byte[] response = handleApdu(commandApdu, apduHex);
+
+            // Log TX
+            logger.log(this, LogEntry.Direction.TX, HexUtils.toHex(response), "Răspuns trimis");
+
             return response;
-        }
 
-        // Try prefix match for GPO and GENERATE AC (variable data)
-        for (String key : RESPONSE_MAP.keySet()) {
-            if (apduHex.startsWith(key)) {
-                byte[] response = RESPONSE_MAP.get(key);
-                logger.log(this, LogEntry.Direction.TX, HexUtils.toHex(response), "Răspuns prefix match");
-                return response;
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error processing APDU", e);
+            return sw((byte) 0x69, (byte) 0x85);
+        }
+    }
+
+    private byte[] handleApdu(byte[] commandApdu, String apduHex) {
+        int ins = commandApdu[1] & 0xFF;
+        int p1 = commandApdu[2] & 0xFF;
+        int p2 = commandApdu[3] & 0xFF;
+        int lc = (commandApdu.length > 4) ? (commandApdu[4] & 0xFF) : 0;
+
+        // SELECT (0xA4)
+        if (ins == 0xA4 && p1 == 0x04 && p2 == 0x00) {
+            if (lc > 0 && commandApdu.length > 5) {
+                byte[] aid = new byte[lc];
+                System.arraycopy(commandApdu, 5, aid, 0, lc);
+                return handleSelect(aid);
             }
         }
 
-        // Default: conditions not satisfied (0x6985)
-        byte[] defaultResp = new byte[]{(byte) 0x69, (byte) 0x85};
-        logger.log(this, LogEntry.Direction.TX, HexUtils.toHex(defaultResp), "APDU nerecunoscut");
-        return defaultResp;
+        // GET PROCESSING OPTIONS (0xA8)
+        if (ins == 0xA8) {
+            return handleGpo(commandApdu);
+        }
+
+        // GENERATE AC (0xAE)
+        if (ins == 0xAE) {
+            return handleGenerateAc(p1);
+        }
+
+        // READ RECORD (0xB2)
+        if (ins == 0xB2) {
+            return handleReadRecord(p1, p2);
+        }
+
+        // Default: unrecognized
+        android.util.Log.w(TAG, "Unrecognized APDU: INS=0x" + String.format("%02X", ins));
+        return sw((byte) 0x6A, (byte) 0x82); // File not found (safer than 0x6985)
+    }
+
+    private byte[] handleSelect(byte[] aid) {
+        String aidHex = HexUtils.toHex(aid).toUpperCase();
+        android.util.Log.d(TAG, "SELECT AID: " + aidHex);
+
+        // Build FCI response
+        byte[] proprietary = TlvBuilder.buildFciProprietary();
+        byte[] fci = TlvBuilder.buildFciTemplate(aidHex, proprietary);
+
+        return concat(fci, sw((byte) 0x90, (byte) 0x00));
+    }
+
+    private byte[] handleGpo(byte[] commandApdu) {
+        android.util.Log.d(TAG, "Received GPO");
+        return concat(TlvBuilder.buildGpoResponse(), sw((byte) 0x90, (byte) 0x00));
+    }
+
+    private byte[] handleGenerateAc(int p1) {
+        android.util.Log.d(TAG, "GENERATE AC with P1=0x" + String.format("%02X", p1));
+
+        byte[] cryptogram;
+        if (p1 == 0x80) {
+            // Request TC (offline) - VERDICT: SUPPORTS OFFLINE
+            cryptogram = TlvBuilder.buildGenerateAcResponse_TC();
+        } else if (p1 == 0x00) {
+            // Request ARQC (online)
+            cryptogram = TlvBuilder.buildGenerateAcResponse_ARQC();
+        } else if (p1 == 0x40) {
+            // Request AAC (declined)
+            cryptogram = HexUtils.fromHex("771A9F270809876543210ABCDEF9F10060600000000");
+        } else {
+            // Unknown P1
+            return sw((byte) 0x6A, (byte) 0x80);
+        }
+
+        return concat(cryptogram, sw((byte) 0x90, (byte) 0x00));
+    }
+
+    private byte[] handleReadRecord(int sfi, int recordNum) {
+        android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
+        
+        // Return mock record
+        byte[] record = HexUtils.fromHex("70819E9F420209465F24033203315A0853998207019456015F3401009F0702FFC09F080200028C279F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C08");
+        return concat(record, sw((byte) 0x90, (byte) 0x00));
     }
 
     @Override
     public void onDeactivated(int reason) {
         analyzer.reset();
+        android.util.Log.d(TAG, "HCE deactivated. Reason: " + reason);
     }
 
     // ===== Helper methods =====
 
-    private static byte[] buildSelectResponse(String aidHex, String cardName) {
-        // FCI Template with proprietary data
-        byte[] proprietary = TlvBuilder.buildFciProprietary();
-        byte[] fci = TlvBuilder.buildFciTemplate(aidHex, proprietary);
-        return fci;
+    private byte[] sw(byte sw1, byte sw2) {
+        return new byte[]{sw1, sw2};
     }
 
-    private static byte[] concat(byte[] a, byte[] b) {
+    private byte[] concat(byte[] a, byte[] b) {
         if (a == null) return b;
         if (b == null) return a;
         byte[] result = new byte[a.length + b.length];
