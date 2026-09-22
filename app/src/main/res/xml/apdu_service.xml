@@ -7,34 +7,19 @@
         android:category="payment"
         android:description="@string/app_name">
 
-        <!-- Contactless PSE (2PAY.SYS.DDF01) - prioritar pentru POS modern -->
+        <!-- Contactless PSE (2PAY.SYS.DDF01) -->
         <aid-filter android:name="325041592E5359532E4444463031" />
 
-        <!-- Contact PSE (1PAY.SYS.DDF01) - prioritar pentru POS clasic -->
+        <!-- Contact PSE (1PAY.SYS.DDF01) -->
         <aid-filter android:name="315041592E5359532E4444463031" />
 
-        <!-- Mastercard Credit/Debit -->
         <aid-filter android:name="A0000000041010" />
-
-        <!-- Maestro (Mastercard Debit) -->
         <aid-filter android:name="A0000000043060" />
-
-        <!-- Visa Credit/Debit -->
         <aid-filter android:name="A0000000031010" />
-
-        <!-- Visa Electron -->
         <aid-filter android:name="A0000000032010" />
-
-        <!-- American Express -->
         <aid-filter android:name="A0000000025010" />
-
-        <!-- Diners Club -->
         <aid-filter android:name="A0000000036000" />
-
-        <!-- JCB -->
         <aid-filter android:name="A0000000651010" />
-
-        <!-- UnionPay -->
         <aid-filter android:name="A0000000330101" />
 
     </aid-group>
