@@ -1,23 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android" android:description="@string/app_name" android:requireDeviceUnlock="false">
-<aid-group android:category="payment" android:description="@string/app_name">
-<!--  Mastercard - Standard  -->
-<aid-filter android:name="A0000000041010"/>
-<!--  Maestro (Mastercard Debit)  -->
-<aid-filter android:name="A0000000043060"/>
-<!--  Visa - Standard  -->
-<aid-filter android:name="A0000000031010"/>
-<!--  Visa Electron (Debit)  -->
-<aid-filter android:name="A0000000032010"/>
-<!--  American Express  -->
-<aid-filter android:name="A0000000025010"/>
-<!--  Diners Club  -->
-<aid-filter android:name="A0000000036000"/>
-<!--  JCB (Japan Credit Bureau)  -->
-<aid-filter android:name="A0000000651010"/>
-<!--  UnionPay (International)  -->
-<aid-filter android:name="A0000000330101"/>
-<!--  PSE (Payment System Environment) - for AID discovery  -->
-<aid-filter android:name="325041592E5359532E444446303031"/>
-</aid-group>
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/app_name"
+    android:requireDeviceUnlock="false">
+
+    <aid-group
+        android:category="payment"
+        android:description="@string/app_name">
+
+        <!-- Contactless PSE (2PAY.SYS.DDF01) - prioritar pentru POS modern -->
+        <aid-filter android:name="325041592E5359532E4444463031" />
+
+        <!-- Contact PSE (1PAY.SYS.DDF01) - prioritar pentru POS clasic -->
+        <aid-filter android:name="315041592E5359532E4444463031" />
+
+        <!-- Mastercard Credit/Debit -->
+        <aid-filter android:name="A0000000041010" />
+
+        <!-- Maestro (Mastercard Debit) -->
+        <aid-filter android:name="A0000000043060" />
+
+        <!-- Visa Credit/Debit -->
+        <aid-filter android:name="A0000000031010" />
+
+        <!-- Visa Electron -->
+        <aid-filter android:name="A0000000032010" />
+
+        <!-- American Express -->
+        <aid-filter android:name="A0000000025010" />
+
+        <!-- Diners Club -->
+        <aid-filter android:name="A0000000036000" />
+
+        <!-- JCB -->
+        <aid-filter android:name="A0000000651010" />
+
+        <!-- UnionPay -->
+        <aid-filter android:name="A0000000330101" />
+
+    </aid-group>
 </host-apdu-service>
