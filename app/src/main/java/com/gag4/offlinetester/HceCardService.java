@@ -113,20 +113,33 @@ public class HceCardService extends HostApduService {
         return concat(cryptogram, TlvBuilder.sw_OK());
     }
 
-    private byte[] handleReadRecord(int sfi, int recordNum) {
-        android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
+private byte[] handleReadRecord(int sfi, int recordNum) {
+    android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
 
-        TlvBuilder record = new TlvBuilder();
+    TlvBuilder record = new TlvBuilder();
+
+    if (sfi == 1) {
+        // SFI 1 - Primary Account Data
         record.add("5A", "5312570022406247");
         record.add("5F24", "271020");
         record.add("5F34", "01");
+        record.add("5F28", "0642");
+        record.add("9F07", "FFFF");
+    } else if (sfi == 2) {
+        // SFI 2 - Track 2 Equivalent Data
+        record.add("57", "5312570022406247D27102010000000000000000");
+    } else if (sfi == 4) {
+        // SFI 4 - CDOLs + CVM
         record.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F3403");
         record.add("8D", "910A8A0295059F37049F4C08");
-
-        byte[] recordBody = TlvBuilder.wrap("70", record.build());
-        return concat(recordBody, TlvBuilder.sw_OK());
+        record.add("9F34", "1F0302");
+    } else {
+        record.add("5A", "5312570022406247");
     }
 
+    byte[] recordBody = TlvBuilder.wrap("70", record.build());
+    return concat(recordBody, TlvBuilder.sw_OK());
+}
     @Override
     public void onDeactivated(int reason) {
         android.util.Log.d(TAG, "HCE deactivated. Reason: " + reason);
