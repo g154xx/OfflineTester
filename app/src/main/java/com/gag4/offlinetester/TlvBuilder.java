@@ -75,12 +75,28 @@ public class TlvBuilder {
 
     /**
      * Conținut FCI Proprietary Template (pentru tag A5).
+     * Versiune COMPLETĂ cu tag-urile pe care POS-urile le cer:
+     * 88 - SFI Directory
+     * 50 - Application Label
+     * 9F12 - Application Preferred Name
+     * 5F2D - Language Preference
+     * 87 - Application Priority Indicator
+     * 9F11 - Issuer Code Table Index
+     * 9F38 - PDOL
+     * 9F07 - Application Usage Control
      */
     public static byte[] buildFciProprietary() {
         TlvBuilder prop = new TlvBuilder();
-        prop.add("9F38", "9F1A029F0206"); // PDOL: Country Code + Amount
-        prop.add("9F07", "FFFF");          // AUC
-        prop.add("9F12", "48434520454D554C41544F52"); // "HCE EMULATOR"
+
+        prop.add("88", "01");
+        prop.add("50", "48434520454D554C41544F52");
+        prop.add("9F12", "48434520454D554C41544F52");
+        prop.add("5F2D", "726F656E");
+        prop.add("87", "01");
+        prop.add("9F11", "01");
+        prop.add("9F38", "9F1A029F0206");
+        prop.add("9F07", "FFFF");
+
         return prop.build();
     }
 
@@ -88,18 +104,17 @@ public class TlvBuilder {
      * Răspuns complet FCI pentru SELECT PSE.
      */
     public static byte[] buildPseFci(String pseNameHex) {
-        // Directory entries (61 = Application Template)
         TlvBuilder entries = new TlvBuilder();
 
         TlvBuilder mc = new TlvBuilder();
         mc.add("4F", "A0000000041010");
-        mc.add("50", "4D617374657263617264"); // "Mastercard"
+        mc.add("50", "4D617374657263617264");
         mc.add("87", "01");
         entries.add("61", mc.build());
 
         TlvBuilder visa = new TlvBuilder();
         visa.add("4F", "A0000000031010");
-        visa.add("50", "56697361"); // "Visa"
+        visa.add("50", "56697361");
         visa.add("87", "02");
         entries.add("61", visa.build());
 
@@ -115,8 +130,7 @@ public class TlvBuilder {
      * GPO Response (Format 1 - tag 80, AIP + AFL concat).
      */
     public static byte[] buildGpoResponse() {
-        byte[] aip = new byte[]{(byte) 0x3C, (byte) 0x00};   // Bit 6 set: offline CVM
-        // AFL: SFI=2, records 1-1 (fix bug #12)
+        byte[] aip = new byte[]{(byte) 0x3C, (byte) 0x00};
         byte[] afl = new byte[]{(byte) 0x10, (byte) 0x01, (byte) 0x01, (byte) 0x00};
 
         byte[] data = new byte[aip.length + afl.length];
@@ -131,11 +145,11 @@ public class TlvBuilder {
      */
     public static byte[] buildGenerateAcResponse_TC() {
         TlvBuilder resp = new TlvBuilder();
-        resp.add("9F27", "80");           // TC
-        resp.add("9F36", "0004");         // ATC
-        resp.add("9F10", "0600000000");   // IAD
-        resp.add("9F37", "12345678");     // UN
-        resp.add("9F34", "1F0002");       // CVM
+        resp.add("9F27", "80");
+        resp.add("9F36", "0004");
+        resp.add("9F10", "0600000000");
+        resp.add("9F37", "12345678");
+        resp.add("9F34", "1F0002");
         return wrap("77", resp.build());
     }
 
@@ -144,11 +158,11 @@ public class TlvBuilder {
      */
     public static byte[] buildGenerateAcResponse_ARQC() {
         TlvBuilder resp = new TlvBuilder();
-        resp.add("9F27", "00");           // ARQC
-        resp.add("9F36", "0004");         // ATC
-        resp.add("9F10", "0601000000");   // IAD
-        resp.add("9F37", "87654321");     // UN
-        resp.add("9F34", "1F0002");       // CVM
+        resp.add("9F27", "00");
+        resp.add("9F36", "0004");
+        resp.add("9F10", "0601000000");
+        resp.add("9F37", "87654321");
+        resp.add("9F34", "1F0002");
         return wrap("77", resp.build());
     }
 
