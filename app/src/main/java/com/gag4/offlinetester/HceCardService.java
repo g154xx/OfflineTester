@@ -112,8 +112,9 @@ public class HceCardService extends HostApduService {
     }
 
     /**
-     * READ RECORD - date bogate in SFI 2 (unde POS-ul citeste efectiv).
-     * SFI 4 records 1-4 returneaza date simple dar valide.
+     * READ RECORD - date bogate, identice cu un card Mastercard real.
+     * SFI 2 = Application Data + CVM + IAC + CDOL1/2 (critice pentru GENERATE AC)
+     * SFI 4 = Card Risk Management Data
      */
     private byte[] handleReadRecord(int sfi, int recordNum) {
         android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
@@ -121,31 +122,42 @@ public class HceCardService extends HostApduService {
         TlvBuilder record = new TlvBuilder();
 
         if (sfi == 2 && recordNum == 1) {
-            // SFI 2 Record 1 - Application data (esential pentru GENERATE AC)
-            record.add("9F42", "0642");                  // Currency (RON)
-            record.add("5F28", "0642");                  // Country (RO)
-            record.add("5A", "5312570022406247");        // PAN
-            record.add("5F24", "271020");                // Expiry
-            record.add("5F34", "01");                    // PAN Sequence Number
-            record.add("9F07", "FFC0");                  // AUC
-            record.add("9F08", "0002");                  // Application Version
-            record.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F3403");  // CDOL1
-            record.add("8D", "910A8A0295059F37049F4C08"); // CDOL2
+            // SFI 2 Record 1 - Application data COMPLET
+            record.add("9F42", "0642");                       // Currency (RON)
+            record.add("5F28", "0642");                       // Country (RO)
+            record.add("5A", "5312570022406247");             // PAN
+            record.add("5F24", "271020");                     // Expiry
+            record.add("5F34", "01");                         // PAN Sequence Number
+            record.add("9F07", "FFC0");                       // AUC
+            record.add("9F08", "0002");                       // Application Version
+            record.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F34039F21039F7C14"); // CDOL1
+            record.add("8D", "910A8A0295059F37049F4C08");     // CDOL2
+            record.add("8E", "000000000000000042031F03");     // CVM List
+            record.add("9F0D", "B450840000");                 // IAC Default
+            record.add("9F0E", "0000000000");                 // IAC Denial
+            record.add("9F0F", "B470848000");                 // IAC Online
+            record.add("9F4A", "82");                         // SDA Tag List
             record.add("57", "5312570022406247D27102010000000000000000"); // Track2
         } else if (sfi == 4 && recordNum == 1) {
             // SFI 4 Record 1 - Card Risk Management Data
-            record.add("8F", "01");                       // CA PK Index
-            record.add("9F32", "03");                     // Issuer PK Exponent
-            record.add("9F47", "03");                     // ICC PK Algorithm
-        } else if (sfi == 4) {
-            // SFI 4 Records 2-4 - simplu
-            record.add("9F4A", "82");                     // SDA Tag List
+            record.add("8F", "01");                           // CA PK Index
+            record.add("9F32", "03");                         // Issuer PK Exponent
+            record.add("9F47", "03");                         // ICC PK Algorithm
+        } else if (sfi == 4 && recordNum == 2) {
+            // SFI 4 Record 2
+            record.add("9F47", "03");
+        } else if (sfi == 4 && recordNum == 3) {
+            // SFI 4 Record 3
+            record.add("9F32", "03");
+        } else if (sfi == 4 && recordNum == 4) {
+            // SFI 4 Record 4
+            record.add("8F", "01");
         } else if (sfi == 1) {
             // SFI 1 - fallback
             record.add("5A", "5312570022406247");
             record.add("5F24", "271020");
         } else {
-            // Orice alt SFI
+            // Orice alt SFI necunoscut
             record.add("5A", "5312570022406247");
         }
 
