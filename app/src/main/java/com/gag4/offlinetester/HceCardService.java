@@ -72,7 +72,7 @@ public class HceCardService extends HostApduService {
 
         // READ RECORD (0xB2)
         if (ins == 0xB2) {
-            int sfi = (p2 >> 3) & 0x1F;   // fix bug #13
+            int sfi = (p2 >> 3) & 0x1F;
             int recordNum = p1;
             return handleReadRecord(sfi, recordNum);
         }
@@ -84,13 +84,11 @@ public class HceCardService extends HostApduService {
         String aidHex = HexUtils.toHex(aid).toUpperCase();
         android.util.Log.d(TAG, "SELECT: " + aidHex);
 
-        // SELECT PSE
         if (PSE_PPSE.equals(aidHex) || PSE_CONTACT.equals(aidHex)) {
             byte[] pseFci = TlvBuilder.buildPseFci(aidHex);
             return concat(pseFci, TlvBuilder.sw_OK());
         }
 
-        // SELECT AID
         byte[] proprietary = TlvBuilder.buildFciProprietary();
         byte[] fci = TlvBuilder.buildFciTemplate(aidHex, proprietary);
         return concat(fci, TlvBuilder.sw_OK());
@@ -113,33 +111,48 @@ public class HceCardService extends HostApduService {
         return concat(cryptogram, TlvBuilder.sw_OK());
     }
 
-private byte[] handleReadRecord(int sfi, int recordNum) {
-    android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
+    /**
+     * READ RECORD - date bogate in SFI 2 (unde POS-ul citeste efectiv).
+     * SFI 4 records 1-4 returneaza date simple dar valide.
+     */
+    private byte[] handleReadRecord(int sfi, int recordNum) {
+        android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
 
-    TlvBuilder record = new TlvBuilder();
+        TlvBuilder record = new TlvBuilder();
 
-    if (sfi == 1) {
-        // SFI 1 - Primary Account Data
-        record.add("5A", "5312570022406247");
-        record.add("5F24", "271020");
-        record.add("5F34", "01");
-        record.add("5F28", "0642");
-        record.add("9F07", "FFFF");
-    } else if (sfi == 2) {
-        // SFI 2 - Track 2 Equivalent Data
-        record.add("57", "5312570022406247D27102010000000000000000");
-    } else if (sfi == 4) {
-        // SFI 4 - CDOLs + CVM
-        record.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F3403");
-        record.add("8D", "910A8A0295059F37049F4C08");
-        record.add("9F34", "1F0302");
-    } else {
-        record.add("5A", "5312570022406247");
+        if (sfi == 2 && recordNum == 1) {
+            // SFI 2 Record 1 - Application data (esential pentru GENERATE AC)
+            record.add("9F42", "0642");                  // Currency (RON)
+            record.add("5F28", "0642");                  // Country (RO)
+            record.add("5A", "5312570022406247");        // PAN
+            record.add("5F24", "271020");                // Expiry
+            record.add("5F34", "01");                    // PAN Sequence Number
+            record.add("9F07", "FFC0");                  // AUC
+            record.add("9F08", "0002");                  // Application Version
+            record.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F3403");  // CDOL1
+            record.add("8D", "910A8A0295059F37049F4C08"); // CDOL2
+            record.add("57", "5312570022406247D27102010000000000000000"); // Track2
+        } else if (sfi == 4 && recordNum == 1) {
+            // SFI 4 Record 1 - Card Risk Management Data
+            record.add("8F", "01");                       // CA PK Index
+            record.add("9F32", "03");                     // Issuer PK Exponent
+            record.add("9F47", "03");                     // ICC PK Algorithm
+        } else if (sfi == 4) {
+            // SFI 4 Records 2-4 - simplu
+            record.add("9F4A", "82");                     // SDA Tag List
+        } else if (sfi == 1) {
+            // SFI 1 - fallback
+            record.add("5A", "5312570022406247");
+            record.add("5F24", "271020");
+        } else {
+            // Orice alt SFI
+            record.add("5A", "5312570022406247");
+        }
+
+        byte[] recordBody = TlvBuilder.wrap("70", record.build());
+        return concat(recordBody, TlvBuilder.sw_OK());
     }
 
-    byte[] recordBody = TlvBuilder.wrap("70", record.build());
-    return concat(recordBody, TlvBuilder.sw_OK());
-}
     @Override
     public void onDeactivated(int reason) {
         android.util.Log.d(TAG, "HCE deactivated. Reason: " + reason);
