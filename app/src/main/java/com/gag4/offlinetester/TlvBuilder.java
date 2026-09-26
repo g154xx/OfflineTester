@@ -119,7 +119,7 @@ public class TlvBuilder {
      */
     public static byte[] buildGpoResponse() {
         TlvBuilder inner = new TlvBuilder();
-        inner.add("82", "1800");                          // AIP
+        inner.add("82", "1980");                          // AIP
         inner.add("94", "1001010020010400");              // AFL fara ODA
         return wrap("77", inner.build());
     }
