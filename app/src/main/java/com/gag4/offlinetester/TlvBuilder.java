@@ -70,9 +70,6 @@ public class TlvBuilder {
         return wrap("6F", inner.build());
     }
 
-    /**
-     * FCI Proprietary Template – IDENTIC cu un card Mastercard real.
-     */
     public static byte[] buildFciProprietary() {
         TlvBuilder prop = new TlvBuilder();
         prop.add("88", "01");
@@ -83,7 +80,6 @@ public class TlvBuilder {
         prop.add("9F12", "48434520454D554C41544F52");
         prop.add("9F38", "9F1A029F0206");
 
-        // BF 0C - Issuer Discretionary Data (matching real card)
         TlvBuilder bf0c = new TlvBuilder();
         bf0c.add("9F4D", "0B0A");
         bf0c.add("9F6E", "06420000303000");
@@ -117,13 +113,14 @@ public class TlvBuilder {
     }
 
     /**
-     * GPO Response – Format 2 (tag 77) IDENTIC cu un card Mastercard real.
-     * AIP = 19 80, AFL = 10 01 01 01 20 01 04 00 (SFI 2 + SFI 4)
+     * GPO Response - Format 2 (tag 77).
+     * AIP = 18 00 : fara SDA, fara DDA, fara CDA. Doar Cardholder Verification + Terminal Risk.
+     * AFL = 10 01 01 00 20 01 04 00 : SFI 2 rec 1-1, SFI 4 rec 1-4, FARA ODA.
      */
     public static byte[] buildGpoResponse() {
         TlvBuilder inner = new TlvBuilder();
-        inner.add("82", "1980");                          // AIP
-        inner.add("94", "1001010120010400");              // AFL (2 intrări)
+        inner.add("82", "1800");                          // AIP
+        inner.add("94", "1001010020010400");              // AFL fara ODA
         return wrap("77", inner.build());
     }
 
