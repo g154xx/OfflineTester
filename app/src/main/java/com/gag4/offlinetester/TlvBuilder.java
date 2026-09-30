@@ -70,15 +70,16 @@ public class TlvBuilder {
         return wrap("6F", inner.build());
     }
 
+    /**
+     * FCI Proprietary Template - IDENTIC cu cardul Mastercard real.
+     * Contine: 50 (label), 87 (priority), 5F2D (lang), BF0C (issuer discretionary)
+     * NU contine: 88, 9F11, 9F12, 9F38 (cardul real nu le are)
+     */
     public static byte[] buildFciProprietary() {
         TlvBuilder prop = new TlvBuilder();
-        prop.add("88", "01");
-        prop.add("50", "48434520454D554C41544F52");
+        prop.add("50", "4465626974204D617374657263617264");  // "Debit Mastercard"
         prop.add("87", "01");
-        prop.add("5F2D", "726F656E");
-        prop.add("9F11", "01");
-        prop.add("9F12", "48434520454D554C41544F52");
-        prop.add("9F38", "9F1A029F0206");
+        prop.add("5F2D", "726F656E");                          // "roen"
 
         TlvBuilder bf0c = new TlvBuilder();
         bf0c.add("9F4D", "0B0A");
@@ -89,20 +90,17 @@ public class TlvBuilder {
         return prop.build();
     }
 
+    /**
+     * PPSE - DOAR Mastercard (ca pe cardul real).
+     */
     public static byte[] buildPseFci(String pseNameHex) {
         TlvBuilder entries = new TlvBuilder();
 
         TlvBuilder mc = new TlvBuilder();
         mc.add("4F", "A0000000041010");
-        mc.add("50", "4D617374657263617264");
         mc.add("87", "01");
+        mc.add("9F0A", "00010104");
         entries.add("61", mc.build());
-
-        TlvBuilder visa = new TlvBuilder();
-        visa.add("4F", "A0000000031010");
-        visa.add("50", "56697361");
-        visa.add("87", "02");
-        entries.add("61", visa.build());
 
         byte[] bf0c = wrap("BF0C", entries.build());
 
@@ -113,34 +111,34 @@ public class TlvBuilder {
     }
 
     /**
-     * GPO Response - Format 2 (tag 77).
-     * AIP = 18 00 : fara SDA, fara DDA, fara CDA. Doar Cardholder Verification + Terminal Risk.
-     * AFL = 10 01 01 00 20 01 04 00 : SFI 2 rec 1-1, SFI 4 rec 1-4, FARA ODA.
+     * GPO Response - Format 2, IDENTIC cu cardul real.
+     * AIP = 1980
+     * AFL = 1001010120010400 (2 intrari: SFI 2 rec 1 cu ODA, SFI 4 rec 1-4 fara ODA)
      */
     public static byte[] buildGpoResponse() {
         TlvBuilder inner = new TlvBuilder();
-        inner.add("82", "1980");                          // AIP
-        inner.add("94", "10010100");
+        inner.add("82", "1980");
+        inner.add("94", "1001010120010400");
         return wrap("77", inner.build());
     }
 
     public static byte[] buildGenerateAcResponse_TC() {
         TlvBuilder resp = new TlvBuilder();
         resp.add("9F27", "80");
-        resp.add("9F36", "0004");
-        resp.add("9F10", "0600000000");
+        resp.add("9F36", "003B");
+        resp.add("9F10", "06011203A020000F0400");
         resp.add("9F37", "12345678");
-        resp.add("9F34", "1F0002");
+        resp.add("9F34", "1F0302");
         return wrap("77", resp.build());
     }
 
     public static byte[] buildGenerateAcResponse_ARQC() {
         TlvBuilder resp = new TlvBuilder();
         resp.add("9F27", "00");
-        resp.add("9F36", "0004");
-        resp.add("9F10", "0601000000");
+        resp.add("9F36", "003B");
+        resp.add("9F10", "06011203A020000F0400");
         resp.add("9F37", "87654321");
-        resp.add("9F34", "1F0002");
+        resp.add("9F34", "1F0302");
         return wrap("77", resp.build());
     }
 
