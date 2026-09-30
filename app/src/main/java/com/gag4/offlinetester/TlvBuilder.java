@@ -70,11 +70,6 @@ public class TlvBuilder {
         return wrap("6F", inner.build());
     }
 
-    /**
-     * FCI Proprietary Template - IDENTIC cu cardul Mastercard real.
-     * Contine: 50 (label), 87 (priority), 5F2D (lang), BF0C (issuer discretionary)
-     * NU contine: 88, 9F11, 9F12, 9F38 (cardul real nu le are)
-     */
     public static byte[] buildFciProprietary() {
         TlvBuilder prop = new TlvBuilder();
         prop.add("50", "4465626974204D617374657263617264");  // "Debit Mastercard"
@@ -90,9 +85,6 @@ public class TlvBuilder {
         return prop.build();
     }
 
-    /**
-     * PPSE - DOAR Mastercard (ca pe cardul real).
-     */
     public static byte[] buildPseFci(String pseNameHex) {
         TlvBuilder entries = new TlvBuilder();
 
@@ -110,11 +102,6 @@ public class TlvBuilder {
         return wrap("6F", inner.build());
     }
 
-    /**
-     * GPO Response - Format 2, IDENTIC cu cardul real.
-     * AIP = 1980
-     * AFL = 1001010120010400 (2 intrari: SFI 2 rec 1 cu ODA, SFI 4 rec 1-4 fara ODA)
-     */
     public static byte[] buildGpoResponse() {
         TlvBuilder inner = new TlvBuilder();
         inner.add("82", "1980");
@@ -122,22 +109,42 @@ public class TlvBuilder {
         return wrap("77", inner.build());
     }
 
+    /**
+     * GENERATE AC Response cu TC (offline approved).
+     */
     public static byte[] buildGenerateAcResponse_TC() {
         TlvBuilder resp = new TlvBuilder();
-        resp.add("9F27", "80");
+        resp.add("9F27", "80");           // TC
+        resp.add("9F36", "003B");         // ATC
+        resp.add("9F10", "06011203A020000F0400"); // IAD
+        resp.add("9F37", "12345678");     // UN
+        resp.add("9F34", "1F0302");       // CVM Results
+        return wrap("77", resp.build());
+    }
+
+    /**
+     * GENERATE AC Response cu ARQC (online request).
+     */
+    public static byte[] buildGenerateAcResponse_ARQC() {
+        TlvBuilder resp = new TlvBuilder();
+        resp.add("9F27", "00");           // ARQC (bit 8,7,6 = 0)
         resp.add("9F36", "003B");
         resp.add("9F10", "06011203A020000F0400");
-        resp.add("9F37", "12345678");
+        resp.add("9F37", "87654321");
         resp.add("9F34", "1F0302");
         return wrap("77", resp.build());
     }
 
-    public static byte[] buildGenerateAcResponse_ARQC() {
+    /**
+     * GENERATE AC Response cu AAC (declined).
+     * 9F27 = 0x00 - cod AAC.
+     */
+    public static byte[] buildGenerateAcResponse_AAC() {
         TlvBuilder resp = new TlvBuilder();
-        resp.add("9F27", "00");
+        resp.add("9F27", "00");           // AAC
         resp.add("9F36", "003B");
         resp.add("9F10", "06011203A020000F0400");
-        resp.add("9F37", "87654321");
+        resp.add("9F37", "12345678");
         resp.add("9F34", "1F0302");
         return wrap("77", resp.build());
     }
