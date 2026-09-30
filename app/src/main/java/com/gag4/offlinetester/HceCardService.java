@@ -7,8 +7,8 @@ public class HceCardService extends HostApduService {
 
     private static final String TAG = "HceCardService";
 
-    private static final String PSE_PPSE = "325041592E5359532E4444463031";    // 2PAY.SYS.DDF01
-    private static final String PSE_CONTACT = "315041592E5359532E4444463031"; // 1PAY.SYS.DDF01
+    private static final String PSE_PPSE = "325041592E5359532E4444463031";
+    private static final String PSE_CONTACT = "315041592E5359532E4444463031";
 
     private ApduLogger logger;
 
@@ -29,15 +29,11 @@ public class HceCardService extends HostApduService {
         try {
             String apduHex = HexUtils.toHex(commandApdu).toUpperCase();
             android.util.Log.d(TAG, "Received APDU: " + apduHex);
-
-            // TX = APDU primit de la POS
             logger.log(this, LogEntry.Direction.TX, apduHex, "POS trimite APDU");
 
             byte[] response = handleApdu(commandApdu);
 
-            // RX = Răspuns trimis către POS
             logger.log(this, LogEntry.Direction.RX, HexUtils.toHex(response), "Răspuns trimis");
-
             return response;
 
         } catch (Exception e) {
@@ -52,7 +48,6 @@ public class HceCardService extends HostApduService {
         int p2 = commandApdu[3] & 0xFF;
         int lc = (commandApdu.length > 4) ? (commandApdu[4] & 0xFF) : 0;
 
-        // SELECT (0xA4)
         if (ins == 0xA4 && p1 == 0x04 && p2 == 0x00 && lc > 0
                 && commandApdu.length >= 5 + lc) {
             byte[] aid = new byte[lc];
@@ -60,21 +55,17 @@ public class HceCardService extends HostApduService {
             return handleSelect(aid);
         }
 
-        // GPO (0xA8)
         if (ins == 0xA8) {
             return concat(TlvBuilder.buildGpoResponse(), TlvBuilder.sw_OK());
         }
 
-        // GENERATE AC (0xAE)
         if (ins == 0xAE) {
             return handleGenerateAc(p1);
         }
 
-        // READ RECORD (0xB2)
         if (ins == 0xB2) {
             int sfi = (p2 >> 3) & 0x1F;
-            int recordNum = p1;
-            return handleReadRecord(sfi, recordNum);
+            return handleReadRecord(sfi, p1);
         }
 
         return new byte[]{(byte) 0x6A, (byte) 0x82};
@@ -112,57 +103,72 @@ public class HceCardService extends HostApduService {
     }
 
     /**
-     * READ RECORD - date bogate, identice cu un card Mastercard real.
-     * SFI 2 = Application Data + CVM + IAC + CDOL1/2 (critice pentru GENERATE AC)
-     * SFI 4 = Card Risk Management Data
+     * READ RECORD - date identice cu cardul Mastercard real scanat.
+     * PAN: 5399820701945601
+     * Expiry: 320331
+     * Currency: 0946 (RON)
      */
     private byte[] handleReadRecord(int sfi, int recordNum) {
         android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
 
-        TlvBuilder record = new TlvBuilder();
-
         if (sfi == 2 && recordNum == 1) {
-            // SFI 2 Record 1 - Application data COMPLET
-            record.add("9F42", "0642");                       // Currency (RON)
-            record.add("5F28", "0642");                       // Country (RO)
-            record.add("5A", "5312570022406247");             // PAN
-            record.add("5F24", "271020");                     // Expiry
-            record.add("5F34", "01");                         // PAN Sequence Number
-            record.add("9F07", "FFC0");                       // AUC
-            record.add("9F08", "0002");                       // Application Version
-            record.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F34039F21039F7C14"); // CDOL1
-            record.add("8D", "910A8A0295059F37049F4C08");     // CDOL2
-            record.add("8E", "000000000000000042031F03");     // CVM List
-            record.add("9F0D", "B450840000");                 // IAC Default
-            record.add("9F0E", "0000000000");                 // IAC Denial
-            record.add("9F0F", "B470848000");                 // IAC Online
-            record.add("9F4A", "82");                         // SDA Tag List
-            record.add("57", "5312570022406247D27102010000000000000000"); // Track2
-        } else if (sfi == 4 && recordNum == 1) {
-            // SFI 4 Record 1 - Card Risk Management Data
-            record.add("8F", "01");                           // CA PK Index
-            record.add("9F32", "03");                         // Issuer PK Exponent
-            record.add("9F47", "03");                         // ICC PK Algorithm
-        } else if (sfi == 4 && recordNum == 2) {
-            // SFI 4 Record 2
-            record.add("9F47", "03");
-        } else if (sfi == 4 && recordNum == 3) {
-            // SFI 4 Record 3
-            record.add("9F32", "03");
-        } else if (sfi == 4 && recordNum == 4) {
-            // SFI 4 Record 4
-            record.add("8F", "01");
-        } else if (sfi == 1) {
-            // SFI 1 - fallback
-            record.add("5A", "5312570022406247");
-            record.add("5F24", "271020");
-        } else {
-            // Orice alt SFI necunoscut
-            record.add("5A", "5312570022406247");
-        }
+            TlvBuilder r = new TlvBuilder();
+            r.add("9F42", "0946");
+            r.add("5F28", "0642");
+            r.add("5A", "5399820701945601");
+            r.add("5F24", "320331");
+            r.add("5F34", "00");
+            r.add("9F07", "FFC0");
+            r.add("9F08", "0002");
+            r.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F34039F21039F7C14");
+            r.add("8D", "910A8A0295059F37049F4C08");
+            r.add("8E", "000000000000000042031F03");
+            r.add("9F0D", "B450840000");
+            r.add("9F0E", "0000000000");
+            r.add("9F0F", "B470848000");
+            r.add("9F4A", "82");
+            r.add("57", "5399820701945601D32032011492700673379F");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
 
-        byte[] recordBody = TlvBuilder.wrap("70", record.build());
-        return concat(recordBody, TlvBuilder.sw_OK());
+        } else if (sfi == 4 && recordNum == 1) {
+            // SFI 4 Rec 1 - doar 9F47 (exact ca pe card real)
+            TlvBuilder r = new TlvBuilder();
+            r.add("9F47", "03");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 2) {
+            // SFI 4 Rec 2 - 8F, 9F32, 92 (identic cu card real)
+            TlvBuilder r = new TlvBuilder();
+            r.add("8F", "06");
+            r.add("9F32", "03");
+            r.add("92", "244DA6FB4D655C3372E1452DBB2B69B4A964FE538E31BEFCA6031B122AF3BA3E507369");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 3) {
+            // SFI 4 Rec 3 - ICC PK Certificate (247 bytes, identic cu card real)
+            String iccCert = "224029E99460EEE7144A539690CAB280D9DA34861F9390F1381DE79964CE3938C14F5E8C7FD07BCD91D798B323F79BB364ACD4A0942FF4DB2A5B51C2793B6B884D0EAD19B01149F5C98E09C035A073D1A8EBF34AD0DA379FBB3512B6BCED598D48BA829E6E83756576A126C94C1DB1F65729543797B777081BCFA749C3A9AD8716E6A529A8274D8334A48692724B37B801A747FE6D56AAFC15E2202D85D692FD784B76A70E2BC19DA152C2229F576DCDC09CEC2C9652566DF35829742C3A5721C38A08154323C791F0F7BA0C67CC10650D938D78D9046B7EEA0B676847B51AFFFE65DF65E66E610484503D4F87643EDFC24196F0F7CE77";
+            TlvBuilder r = new TlvBuilder();
+            r.add("9F46", iccCert);
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 4) {
+            // SFI 4 Rec 4 - Issuer PK Certificate (248 bytes, identic cu card real)
+            String issCert = "39A36971D15EC77779428A6D0ADE258ACFCE0EC3E0C4ED5BF6675B75A27FFCC74B61614FEAD95F79D751BC3BE6D274653191709F44BC650CF6A07CE1B799C62DF04D719CAA8EDCE9C31483FE90258E6F838BEAD3968FB90C1D3A183AC3F94912A422D1DB5E687FF4026146BE919F34CCB7D64109955264B20E6405C1990672ABDFD9D8D6ED1ACFAFAFFA7FE0E5FCF8CA4FC4A30C936157245DF221566A45D5640E60D4F9FE72CF78ED371973F90574284B14E4B23FBC927D1D9EB25CE11BCDCB2881CCC953E24748567C9F364E0728767A83CD0D82FD577DA2650F16BD40E540B5734816802ED939EC382AEB4AF2E0C4F947DCC72C6F1DC5";
+            TlvBuilder r = new TlvBuilder();
+            r.add("90", issCert);
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 1) {
+            TlvBuilder r = new TlvBuilder();
+            r.add("5A", "5399820701945601");
+            r.add("5F24", "320331");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else {
+            TlvBuilder r = new TlvBuilder();
+            r.add("5A", "5399820701945601");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+        }
     }
 
     @Override
