@@ -85,29 +85,32 @@ public class HceCardService extends HostApduService {
         return concat(fci, TlvBuilder.sw_OK());
     }
 
+    /**
+     * GENERATE AC - tratăm toate valorile P1 pe care le trimit POS-urile.
+     * P1 = 0x00 → ARQC (online)
+     * P1 = 0x40 → AAC (declined)
+     * P1 = 0x80 → TC (offline approved)
+     * P1 = 0x90 → AAC + CDA (offline declined)
+     * P1 = 0xC0 → TC + CDA (offline approved + signature)
+     */
     private byte[] handleGenerateAc(int p1) {
         android.util.Log.d(TAG, "GENERATE AC P1=0x" + String.format("%02X", p1));
 
         byte[] cryptogram;
-        if (p1 == 0x80) {
+        if (p1 == 0x80 || p1 == 0xC0) {
             cryptogram = TlvBuilder.buildGenerateAcResponse_TC();
         } else if (p1 == 0x00) {
             cryptogram = TlvBuilder.buildGenerateAcResponse_ARQC();
-        } else if (p1 == 0x40) {
-            cryptogram = TlvBuilder.buildGenerateAcResponse_ARQC();
+        } else if (p1 == 0x40 || p1 == 0x90) {
+            cryptogram = TlvBuilder.buildGenerateAcResponse_AAC();
         } else {
+            android.util.Log.w(TAG, "Unknown P1: 0x" + String.format("%02X", p1));
             return new byte[]{(byte) 0x6A, (byte) 0x80};
         }
 
         return concat(cryptogram, TlvBuilder.sw_OK());
     }
 
-    /**
-     * READ RECORD - date identice cu cardul Mastercard real scanat.
-     * PAN: 5399820701945601
-     * Expiry: 320331
-     * Currency: 0946 (RON)
-     */
     private byte[] handleReadRecord(int sfi, int recordNum) {
         android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
 
@@ -131,13 +134,11 @@ public class HceCardService extends HostApduService {
             return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
 
         } else if (sfi == 4 && recordNum == 1) {
-            // SFI 4 Rec 1 - doar 9F47 (exact ca pe card real)
             TlvBuilder r = new TlvBuilder();
             r.add("9F47", "03");
             return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
 
         } else if (sfi == 4 && recordNum == 2) {
-            // SFI 4 Rec 2 - 8F, 9F32, 92 (identic cu card real)
             TlvBuilder r = new TlvBuilder();
             r.add("8F", "06");
             r.add("9F32", "03");
@@ -145,14 +146,12 @@ public class HceCardService extends HostApduService {
             return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
 
         } else if (sfi == 4 && recordNum == 3) {
-            // SFI 4 Rec 3 - ICC PK Certificate (247 bytes, identic cu card real)
             String iccCert = "224029E99460EEE7144A539690CAB280D9DA34861F9390F1381DE79964CE3938C14F5E8C7FD07BCD91D798B323F79BB364ACD4A0942FF4DB2A5B51C2793B6B884D0EAD19B01149F5C98E09C035A073D1A8EBF34AD0DA379FBB3512B6BCED598D48BA829E6E83756576A126C94C1DB1F65729543797B777081BCFA749C3A9AD8716E6A529A8274D8334A48692724B37B801A747FE6D56AAFC15E2202D85D692FD784B76A70E2BC19DA152C2229F576DCDC09CEC2C9652566DF35829742C3A5721C38A08154323C791F0F7BA0C67CC10650D938D78D9046B7EEA0B676847B51AFFFE65DF65E66E610484503D4F87643EDFC24196F0F7CE77";
             TlvBuilder r = new TlvBuilder();
             r.add("9F46", iccCert);
             return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
 
         } else if (sfi == 4 && recordNum == 4) {
-            // SFI 4 Rec 4 - Issuer PK Certificate (248 bytes, identic cu card real)
             String issCert = "39A36971D15EC77779428A6D0ADE258ACFCE0EC3E0C4ED5BF6675B75A27FFCC74B61614FEAD95F79D751BC3BE6D274653191709F44BC650CF6A07CE1B799C62DF04D719CAA8EDCE9C31483FE90258E6F838BEAD3968FB90C1D3A183AC3F94912A422D1DB5E687FF4026146BE919F34CCB7D64109955264B20E6405C1990672ABDFD9D8D6ED1ACFAFAFFA7FE0E5FCF8CA4FC4A30C936157245DF221566A45D5640E60D4F9FE72CF78ED371973F90574284B14E4B23FBC927D1D9EB25CE11BCDCB2881CCC953E24748567C9F364E0728767A83CD0D82FD577DA2650F16BD40E540B5734816802ED939EC382AEB4AF2E0C4F947DCC72C6F1DC5";
             TlvBuilder r = new TlvBuilder();
             r.add("90", issCert);
