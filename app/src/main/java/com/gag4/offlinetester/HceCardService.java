@@ -1,30 +1,20 @@
 package com.gag4.offlinetester;
 
-import android.content.Context;
 import android.nfc.cardemulation.HostApduService;
 import android.os.Bundle;
 
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * HCE Card Service - Emulates a contactless card that supports offline mode.
- * 
- * FIXES:
- * - Proper AID matching (no trailing zeros)
- * - Flexible APDU matching
- * - Better error handling
- */
 public class HceCardService extends HostApduService {
 
     private static final String TAG = "HceCardService";
-    private ApduAnalyzer analyzer;
+
+    private static final String PSE_PPSE = "325041592E5359532E4444463031";
+    private static final String PSE_CONTACT = "315041592E5359532E4444463031";
+
     private ApduLogger logger;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        analyzer = new ApduAnalyzer();
         logger = ApduLogger.getInstance();
         logger.init(this);
         android.util.Log.d(TAG, "HceCardService created");
@@ -33,122 +23,156 @@ public class HceCardService extends HostApduService {
     @Override
     public byte[] processCommandApdu(byte[] commandApdu, Bundle extras) {
         if (commandApdu == null || commandApdu.length < 4) {
-            return sw((byte) 0x69, (byte) 0x85);
+            return new byte[]{(byte) 0x69, (byte) 0x85};
         }
 
         try {
             String apduHex = HexUtils.toHex(commandApdu).toUpperCase();
             android.util.Log.d(TAG, "Received APDU: " + apduHex);
+            logger.log(this, LogEntry.Direction.TX, apduHex, "POS trimite APDU");
 
-            // Log RX
-            logger.log(this, LogEntry.Direction.RX, apduHex, "POS trimite APDU");
+            byte[] response = handleApdu(commandApdu);
 
-            // Analyze for verdict
-            analyzer.analyzeTx(commandApdu);
-
-            byte[] response = handleApdu(commandApdu, apduHex);
-
-            // Log TX
-            logger.log(this, LogEntry.Direction.TX, HexUtils.toHex(response), "Răspuns trimis");
-
+            logger.log(this, LogEntry.Direction.RX, HexUtils.toHex(response), "Răspuns trimis");
             return response;
 
         } catch (Exception e) {
             android.util.Log.e(TAG, "Error processing APDU", e);
-            return sw((byte) 0x69, (byte) 0x85);
+            return new byte[]{(byte) 0x69, (byte) 0x85};
         }
     }
 
-    private byte[] handleApdu(byte[] commandApdu, String apduHex) {
+    private byte[] handleApdu(byte[] commandApdu) {
         int ins = commandApdu[1] & 0xFF;
         int p1 = commandApdu[2] & 0xFF;
         int p2 = commandApdu[3] & 0xFF;
         int lc = (commandApdu.length > 4) ? (commandApdu[4] & 0xFF) : 0;
 
-        // SELECT (0xA4)
-        if (ins == 0xA4 && p1 == 0x04 && p2 == 0x00) {
-            if (lc > 0 && commandApdu.length > 5) {
-                byte[] aid = new byte[lc];
-                System.arraycopy(commandApdu, 5, aid, 0, lc);
-                return handleSelect(aid);
-            }
+        if (ins == 0xA4 && p1 == 0x04 && p2 == 0x00 && lc > 0
+                && commandApdu.length >= 5 + lc) {
+            byte[] aid = new byte[lc];
+            System.arraycopy(commandApdu, 5, aid, 0, lc);
+            return handleSelect(aid);
         }
 
-        // GET PROCESSING OPTIONS (0xA8)
         if (ins == 0xA8) {
-            return handleGpo(commandApdu);
+            return concat(TlvBuilder.buildGpoResponse(), TlvBuilder.sw_OK());
         }
 
-        // GENERATE AC (0xAE)
         if (ins == 0xAE) {
             return handleGenerateAc(p1);
         }
 
-        // READ RECORD (0xB2)
         if (ins == 0xB2) {
-            return handleReadRecord(p1, p2);
+            int sfi = (p2 >> 3) & 0x1F;
+            return handleReadRecord(sfi, p1);
         }
 
-        // Default: unrecognized
-        android.util.Log.w(TAG, "Unrecognized APDU: INS=0x" + String.format("%02X", ins));
-        return sw((byte) 0x6A, (byte) 0x82); // File not found (safer than 0x6985)
+        return new byte[]{(byte) 0x6A, (byte) 0x82};
     }
 
     private byte[] handleSelect(byte[] aid) {
         String aidHex = HexUtils.toHex(aid).toUpperCase();
-        android.util.Log.d(TAG, "SELECT AID: " + aidHex);
+        android.util.Log.d(TAG, "SELECT: " + aidHex);
 
-        // Build FCI response
-        byte[] proprietary = TlvBuilder.buildFciProprietary();
-        byte[] fci = TlvBuilder.buildFciTemplate(aidHex, proprietary);
-
-        return concat(fci, sw((byte) 0x90, (byte) 0x00));
-    }
-
-    private byte[] handleGpo(byte[] commandApdu) {
-        android.util.Log.d(TAG, "Received GPO");
-        return concat(TlvBuilder.buildGpoResponse(), sw((byte) 0x90, (byte) 0x00));
-    }
-
-    private byte[] handleGenerateAc(int p1) {
-        android.util.Log.d(TAG, "GENERATE AC with P1=0x" + String.format("%02X", p1));
-
-        byte[] cryptogram;
-        if (p1 == 0x80) {
-            // Request TC (offline) - VERDICT: SUPPORTS OFFLINE
-            cryptogram = TlvBuilder.buildGenerateAcResponse_TC();
-        } else if (p1 == 0x00) {
-            // Request ARQC (online)
-            cryptogram = TlvBuilder.buildGenerateAcResponse_ARQC();
-        } else if (p1 == 0x40) {
-            // Request AAC (declined)
-            cryptogram = HexUtils.fromHex("771A9F270809876543210ABCDEF9F10060600000000");
-        } else {
-            // Unknown P1
-            return sw((byte) 0x6A, (byte) 0x80);
+        if (PSE_PPSE.equals(aidHex) || PSE_CONTACT.equals(aidHex)) {
+            byte[] pseFci = TlvBuilder.buildPseFci(aidHex);
+            return concat(pseFci, TlvBuilder.sw_OK());
         }
 
-        return concat(cryptogram, sw((byte) 0x90, (byte) 0x00));
+        byte[] proprietary = TlvBuilder.buildFciProprietary();
+        byte[] fci = TlvBuilder.buildFciTemplate(aidHex, proprietary);
+        return concat(fci, TlvBuilder.sw_OK());
+    }
+
+    /**
+     * GENERATE AC - tratăm toate valorile P1 pe care le trimit POS-urile.
+     * P1 = 0x00 → ARQC (online)
+     * P1 = 0x40 → AAC (declined)
+     * P1 = 0x80 → TC (offline approved)
+     * P1 = 0x90 → AAC + CDA (offline declined)
+     * P1 = 0xC0 → TC + CDA (offline approved + signature)
+     */
+    private byte[] handleGenerateAc(int p1) {
+        android.util.Log.d(TAG, "GENERATE AC P1=0x" + String.format("%02X", p1));
+
+        byte[] cryptogram;
+        if (p1 == 0x80 || p1 == 0xC0) {
+            cryptogram = TlvBuilder.buildGenerateAcResponse_TC();
+        } else if (p1 == 0x00) {
+            cryptogram = TlvBuilder.buildGenerateAcResponse_ARQC();
+        } else if (p1 == 0x40 || p1 == 0x90) {
+            cryptogram = TlvBuilder.buildGenerateAcResponse_AAC();
+        } else {
+            android.util.Log.w(TAG, "Unknown P1: 0x" + String.format("%02X", p1));
+            return new byte[]{(byte) 0x6A, (byte) 0x80};
+        }
+
+        return concat(cryptogram, TlvBuilder.sw_OK());
     }
 
     private byte[] handleReadRecord(int sfi, int recordNum) {
         android.util.Log.d(TAG, "READ RECORD SFI=" + sfi + " REC=" + recordNum);
-        
-        // Return mock record
-        byte[] record = HexUtils.fromHex("70819E9F420209465F24033203315A0853998207019456015F3401009F0702FFC09F080200028C279F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C08");
-        return concat(record, sw((byte) 0x90, (byte) 0x00));
+
+        if (sfi == 2 && recordNum == 1) {
+            TlvBuilder r = new TlvBuilder();
+            r.add("9F42", "0946");
+            r.add("5F28", "0642");
+            r.add("5A", "5399820701945601");
+            r.add("5F24", "320331");
+            r.add("5F34", "00");
+            r.add("9F07", "FFC0");
+            r.add("9F08", "0002");
+            r.add("8C", "9F02069F03069F1A0295055F2A029A039C019F37049F35019F45029F4C089F34039F21039F7C14");
+            r.add("8D", "910A8A0295059F37049F4C08");
+            r.add("8E", "000000000000000042031F03");
+            r.add("9F0D", "B450840000");
+            r.add("9F0E", "0000000000");
+            r.add("9F0F", "B470848000");
+            r.add("9F4A", "82");
+            r.add("57", "5399820701945601D32032011492700673379F");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 1) {
+            TlvBuilder r = new TlvBuilder();
+            r.add("9F47", "03");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 2) {
+            TlvBuilder r = new TlvBuilder();
+            r.add("8F", "06");
+            r.add("9F32", "03");
+            r.add("92", "244DA6FB4D655C3372E1452DBB2B69B4A964FE538E31BEFCA6031B122AF3BA3E507369");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 3) {
+            String iccCert = "224029E99460EEE7144A539690CAB280D9DA34861F9390F1381DE79964CE3938C14F5E8C7FD07BCD91D798B323F79BB364ACD4A0942FF4DB2A5B51C2793B6B884D0EAD19B01149F5C98E09C035A073D1A8EBF34AD0DA379FBB3512B6BCED598D48BA829E6E83756576A126C94C1DB1F65729543797B777081BCFA749C3A9AD8716E6A529A8274D8334A48692724B37B801A747FE6D56AAFC15E2202D85D692FD784B76A70E2BC19DA152C2229F576DCDC09CEC2C9652566DF35829742C3A5721C38A08154323C791F0F7BA0C67CC10650D938D78D9046B7EEA0B676847B51AFFFE65DF65E66E610484503D4F87643EDFC24196F0F7CE77";
+            TlvBuilder r = new TlvBuilder();
+            r.add("9F46", iccCert);
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 4 && recordNum == 4) {
+            String issCert = "39A36971D15EC77779428A6D0ADE258ACFCE0EC3E0C4ED5BF6675B75A27FFCC74B61614FEAD95F79D751BC3BE6D274653191709F44BC650CF6A07CE1B799C62DF04D719CAA8EDCE9C31483FE90258E6F838BEAD3968FB90C1D3A183AC3F94912A422D1DB5E687FF4026146BE919F34CCB7D64109955264B20E6405C1990672ABDFD9D8D6ED1ACFAFAFFA7FE0E5FCF8CA4FC4A30C936157245DF221566A45D5640E60D4F9FE72CF78ED371973F90574284B14E4B23FBC927D1D9EB25CE11BCDCB2881CCC953E24748567C9F364E0728767A83CD0D82FD577DA2650F16BD40E540B5734816802ED939EC382AEB4AF2E0C4F947DCC72C6F1DC5";
+            TlvBuilder r = new TlvBuilder();
+            r.add("90", issCert);
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else if (sfi == 1) {
+            TlvBuilder r = new TlvBuilder();
+            r.add("5A", "5399820701945601");
+            r.add("5F24", "320331");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+
+        } else {
+            TlvBuilder r = new TlvBuilder();
+            r.add("5A", "5399820701945601");
+            return concat(TlvBuilder.wrap("70", r.build()), TlvBuilder.sw_OK());
+        }
     }
 
     @Override
     public void onDeactivated(int reason) {
-        analyzer.reset();
         android.util.Log.d(TAG, "HCE deactivated. Reason: " + reason);
-    }
-
-    // ===== Helper methods =====
-
-    private byte[] sw(byte sw1, byte sw2) {
-        return new byte[]{sw1, sw2};
     }
 
     private byte[] concat(byte[] a, byte[] b) {

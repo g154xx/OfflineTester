@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,9 +25,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -53,10 +49,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Init ViewModel
         viewModel = new ViewModelProvider(this).get(TestViewModel.class);
 
-        // Init UI components
         initViews();
         setupRecyclerView();
         observeViewModel();
@@ -64,7 +58,6 @@ public class MainActivity extends AppCompatActivity {
         checkPermissions();
         checkNfc();
 
-        // Init logger
         ApduLogger.getInstance().init(this);
     }
 
@@ -84,34 +77,34 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupRecyclerView() {
-        logAdapter = new LogAdapter(viewModel.getLogEntries().getValue());
+        logAdapter = new LogAdapter();
         rvLog.setLayoutManager(new LinearLayoutManager(this));
         rvLog.setAdapter(logAdapter);
     }
 
     private void observeViewModel() {
         viewModel.getLogEntries().observe(this, entries -> {
-            logAdapter.notifyDataSetChanged();
-            if (entries.size() > 0) {
+            logAdapter.setEntries(entries);
+            if (entries != null && entries.size() > 0) {
                 rvLog.smoothScrollToPosition(entries.size() - 1);
             }
         });
 
         viewModel.getStatusText().observe(this, status -> {
-            tvStatus.setText(status);
+            if (status != null) tvStatus.setText(status);
         });
 
         viewModel.getProgressPercent().observe(this, percent -> {
-            pbTest.setProgress(percent);
+            if (percent != null) pbTest.setProgress(percent);
         });
 
         viewModel.getTestVerdict().observe(this, verdict -> {
             if (verdict != null) {
                 tvVerdict.setText(verdict.getDisplayText());
-                // Color code verdict
                 if (verdict == ApduAnalyzer.Verdict.SUPPORTS_OFFLINE) {
                     tvVerdict.setTextColor(getResources().getColor(android.R.color.holo_green_light));
-                } else if (verdict == ApduAnalyzer.Verdict.REQUIRES_ONLINE || verdict == ApduAnalyzer.Verdict.DECLINED) {
+                } else if (verdict == ApduAnalyzer.Verdict.REQUIRES_ONLINE
+                        || verdict == ApduAnalyzer.Verdict.DECLINED) {
                     tvVerdict.setTextColor(getResources().getColor(android.R.color.holo_red_light));
                 } else {
                     tvVerdict.setTextColor(getResources().getColor(android.R.color.holo_orange_light));
@@ -120,9 +113,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
         viewModel.getTestRunning().observe(this, running -> {
-            testInProgress = running;
-            btnStart.setEnabled(!running);
-            if (!running) {
+            testInProgress = (running != null) && running;
+            btnStart.setEnabled(!testInProgress);
+            if (!testInProgress) {
                 tvSummary.setText(viewModel.getTransactionSummary());
             }
         });
@@ -136,26 +129,37 @@ public class MainActivity extends AppCompatActivity {
                     String direction = intent.getStringExtra(ApduLogger.EXTRA_DIRECTION);
                     String data = intent.getStringExtra(ApduLogger.EXTRA_DATA);
                     String note = intent.getStringExtra(ApduLogger.EXTRA_NOTE);
-                    long timestamp = intent.getLongExtra(ApduLogger.EXTRA_TIMESTAMP, System.currentTimeMillis());
+                    long timestamp = intent.getLongExtra(ApduLogger.EXTRA_TIMESTAMP,
+                            System.currentTimeMillis());
 
-                    LogEntry.Direction dir = LogEntry.Direction.valueOf(direction);
+                    if (direction == null) return;
+
+                    LogEntry.Direction dir;
+                    try {
+                        dir = LogEntry.Direction.valueOf(direction);
+                    } catch (Exception e) {
+                        dir = LogEntry.Direction.INFO;
+                    }
+
                     LogEntry entry = new LogEntry(timestamp, dir, data, note);
 
                     // Update progress
                     long elapsed = System.currentTimeMillis() - viewModel.testStartTime;
                     int percent = (int) ((elapsed * 100) / Constants.TEST_TIMEOUT_MS);
-                    percent = Math.min(percent, 99); // Cap at 99 until test ends
+                    percent = Math.min(percent, 99);
                     viewModel.updateProgress(percent);
 
                     viewModel.addLogEntry(entry);
 
-                    // Analyze APDU if TX
-                    if (dir == LogEntry.Direction.TX) {
-                        byte[] apdu = HexUtils.fromHex(data);
-                        viewModel.analyzeApdu(apdu);
+                    // Analyze TX (APDU primit de la POS)
+                    if (dir == LogEntry.Direction.TX && data != null) {
+                        try {
+                            byte[] apdu = HexUtils.fromHex(data);
+                            viewModel.analyzeApdu(apdu);
+                        } catch (Exception ignored) {}
                     }
 
-                    // Check if test should end
+                    // Auto-finish on timeout
                     if (elapsed >= Constants.TEST_TIMEOUT_MS && testInProgress) {
                         finishTest();
                     }
@@ -164,27 +168,29 @@ public class MainActivity extends AppCompatActivity {
         };
 
         IntentFilter filter = new IntentFilter(ApduLogger.ACTION_LOG);
-        registerReceiver(logReceiver, filter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(logReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(logReceiver, filter);
+        }
     }
 
     private void checkPermissions() {
+        // NFC = permisiune de manifest (nu runtime)
+        // WRITE/READ_EXTERNAL_STORAGE = eliminate pe Android 11+
+        // Doar POST_NOTIFICATIONS necesită runtime pe Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.POST_NOTIFICATIONS},
                         PERMISSION_REQUEST_CODE);
+                return;
             }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                        PERMISSION_REQUEST_CODE);
-            }
-        }
+        tvStatus.setText("✓ Permisiuni OK - NFC activ");
+        tvStatus.setTextColor(getResources().getColor(android.R.color.holo_green_light));
     }
 
     private void checkNfc() {
@@ -200,7 +206,6 @@ public class MainActivity extends AppCompatActivity {
         clearLog();
         viewModel.startTest();
 
-        // Set timeout
         timeoutRunnable = this::finishTest;
         uiHandler.postDelayed(timeoutRunnable, Constants.TEST_TIMEOUT_MS);
 
@@ -215,7 +220,6 @@ public class MainActivity extends AppCompatActivity {
         ApduAnalyzer.Verdict verdict = viewModel.getAnalyzer().finalizeAnalysis();
         viewModel.finishTest(verdict);
 
-        // Log verdict
         viewModel.addLogFromApdu(
                 LogEntry.Direction.VERDICT,
                 verdict.getDisplayText(),
@@ -240,33 +244,25 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Nu sunt log-uri de exportat!", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        // Show path
         String msg = "Log salvat în:\n" + logFile.getAbsolutePath();
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
-
-        // Try to open file manager
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        Uri uri = Uri.parse("file://" + logFile.getParent());
-        intent.setData(uri);
-        try {
-            startActivity(intent);
-        } catch (Exception e) {
-            android.util.Log.e(TAG, "Could not open file manager", e);
-        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (logReceiver != null) {
-            unregisterReceiver(logReceiver);
+            try {
+                unregisterReceiver(logReceiver);
+            } catch (Exception ignored) {}
         }
         ApduLogger.getInstance().shutdown();
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
             boolean allGranted = true;
@@ -276,8 +272,16 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
-            if (!allGranted) {
-                Toast.makeText(this, "Permisiuni necesare!", Toast.LENGTH_SHORT).show();
+
+            if (allGranted) {
+                tvStatus.setText("✓ Permisiuni OK - NFC activ");
+                tvStatus.setTextColor(getResources().getColor(android.R.color.holo_green_light));
+                Toast.makeText(this, "Permisiuni acordate!", Toast.LENGTH_SHORT).show();
+            } else {
+                tvStatus.setText("Permisiuni parțiale - app poate funcționa");
+                tvStatus.setTextColor(getResources().getColor(android.R.color.holo_orange_light));
+                Toast.makeText(this, "Notificările sunt refuzate, dar aplicația poate rula.",
+                        Toast.LENGTH_LONG).show();
             }
         }
     }

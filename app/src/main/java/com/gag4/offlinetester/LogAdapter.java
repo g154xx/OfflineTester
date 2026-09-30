@@ -9,14 +9,27 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
 
-    private final List<LogEntry> entries;
+    private List<LogEntry> entries = new ArrayList<>();
 
-    public LogAdapter(List<LogEntry> entries) {
-        this.entries = entries;
+    public LogAdapter() {}
+
+    public LogAdapter(List<LogEntry> initialEntries) {
+        if (initialEntries != null) {
+            this.entries = initialEntries;
+        }
+    }
+
+    /**
+     * Setează o listă nouă (nu doar notify – referința se schimbă).
+     */
+    public void setEntries(List<LogEntry> newEntries) {
+        this.entries = (newEntries != null) ? newEntries : new ArrayList<>();
+        notifyDataSetChanged();
     }
 
     @NonNull
@@ -32,36 +45,40 @@ public class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
         LogEntry entry = entries.get(position);
         holder.tvTime.setText(entry.getFormattedTime());
 
-        int colorDir = Color.parseColor("#FFFFFF");
-        int colorData = Color.parseColor("#FFFFFF");
-        String dirText = "";
+        int colorDir;
+        int colorData;
+        String dirText;
 
         switch (entry.getDirection()) {
             case TX:
                 dirText = ">>";
-                colorDir = Color.parseColor("#4CAF50");  // Green
+                colorDir = Color.parseColor("#4CAF50");
                 colorData = Color.parseColor("#4CAF50");
                 break;
             case RX:
                 dirText = "<<";
-                colorDir = Color.parseColor("#03A9F4");  // Blue
+                colorDir = Color.parseColor("#03A9F4");
                 colorData = Color.parseColor("#03A9F4");
                 break;
             case INFO:
                 dirText = "--";
-                colorDir = Color.parseColor("#9E9E9E");  // Gray
+                colorDir = Color.parseColor("#9E9E9E");
                 colorData = Color.parseColor("#9E9E9E");
                 break;
             case ERROR:
                 dirText = "!!";
-                colorDir = Color.parseColor("#F44336");  // Red
+                colorDir = Color.parseColor("#F44336");
                 colorData = Color.parseColor("#F44336");
                 break;
             case VERDICT:
                 dirText = "==";
-                colorDir = Color.parseColor("#FFC107");  // Yellow
+                colorDir = Color.parseColor("#FFC107");
                 colorData = Color.parseColor("#FFC107");
                 break;
+            default:
+                dirText = "?";
+                colorDir = Color.parseColor("#FFFFFF");
+                colorData = Color.parseColor("#FFFFFF");
         }
 
         holder.tvDir.setText(dirText);
