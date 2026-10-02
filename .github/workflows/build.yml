@@ -2,9 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ grokogfline ]
   pull_request:
-    branches: [ main ]
+    branches: [ grokogfline ]
   workflow_dispatch:
 
 jobs:
